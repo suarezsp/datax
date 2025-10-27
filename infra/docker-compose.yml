@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: timescale/timescaledb:latest
+    container_name: hydra_db
+    restart: always
+    environment:
+      POSTGRES_USER: hydra
+      POSTGRES_PASSWORD: hydra
+      POSTGRES_DB: hydra
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/db_data:/var/lib/postgresql/data
+
+  backend:
+    build: ../backend
+    container_name: hydra_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/code
+    depends_on:
+      - db
+
+  frontend:
+    build: ../dashboard
+    container_name: hydra_frontend
+    command: npm run dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../dashboard:/app
+    depends_on:
+      - backend
