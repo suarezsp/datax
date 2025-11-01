@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 from app.core.database import Base
+from datetime import datetime
 
 class Alert(Base):
     __tablename__ = "alerts"  # specify the table name
@@ -8,5 +9,5 @@ class Alert(Base):
     host = Column(String, index=True)  # host column
     type = Column(String)  # alert type column
     value = Column(Float)  # alert value column
-    timestamp = Column(DateTime, default=datetime.utcnow)  # timestamp column with default value
+    timestamp = Column(DateTime, default=datetime.utcnow)
     status = Column(Boolean, default="active")  # status column to indicate if alert is active or resolved
