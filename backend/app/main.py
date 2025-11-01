@@ -1,7 +1,13 @@
 from fastapi import FastAPI
+from app.routes.metric_routes import router as metric_router
+from app.core.database import Base, engine
 
-app = FastAPI(title="Datax API", version="0.1")
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="hydra API", version="0.1")
+
+app.include_router(metric_router)
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Datax API"}
+    return {"message": "Welcome to Hydra API"}
