@@ -1,14 +1,29 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+from app.core.database import SessionLocal
+from app.models.metric import Metric
 from app.schemas.metric import MetricCreate, MetricResponse
-from app.services.metric_services import create_metric, get_recent_metrics
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@router.get("/", response_model=list[MetricResponse])
+def get_metrics(limit: int = 100, db: Session = Depends(get_db)):
+    """Devuelve las métricas más recientes"""
+    metrics = db.query(Metric).order_by(Metric.timestamp.desc()).limit(limit).all()
+    return metrics
+
 @router.post("/", response_model=MetricResponse)
 def add_metric(metric: MetricCreate, db: Session = Depends(get_db)):
-    return create_metric(db, metric)
-
-def list_metrics(db: Session = Depends(get_db)):
-    return get_recent_metrics(db)
+    new_metric = Metric(**metric.dict())
+    db.add(new_metric)
+    db.commit()
+    db.refresh(new_metric)
+    return new_metric

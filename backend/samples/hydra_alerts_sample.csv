@@ -1,0 +1,11 @@
+id,host,type,value,timestamp,status
+1,hydra-node-04,cpu_high,92.3,2025-10-31T03:25:00Z,active
+2,hydra-node-12,latency_high,268.5,2025-10-31T04:10:00Z,resolved
+3,hydra-node-03,memory_high,89.4,2025-10-31T06:55:00Z,active
+4,hydra-node-09,cpu_high,95.6,2025-10-31T08:20:00Z,active
+5,hydra-node-18,latency_high,310.2,2025-10-31T09:05:00Z,resolved
+6,hydra-node-04,memory_high,86.7,2025-10-31T10:40:00Z,active
+7,hydra-node-11,cpu_high,91.5,2025-10-31T12:00:00Z,active
+8,hydra-node-07,latency_high,270.8,2025-10-31T13:15:00Z,resolved
+9,hydra-node-02,memory_high,88.9,2025-10-31T14:25:00Z,active
+10,hydra-node-15,cpu_high,94.2,2025-10-31T16:45:00Z,resolved

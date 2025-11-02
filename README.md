@@ -39,9 +39,18 @@ npm install
 npm run dev
 ```
 
-4. Docker (optional)
+4. Docker
 
 ```bash
 cd infra
 docker compose up --build
+```
+
+5. Generate sample data
+
+```bash
+cd hydra
+python backend/scripts/generate_sample_data.py
+mv hydra_metrics_sample.csv /backend/samples/
+mv hydra_alerts_sample.csv /backend/samples/
 ```
