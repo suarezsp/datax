@@ -1,200 +1,92 @@
+// src/pages/dashboard/Page.tsx
 "use client";
 
-import React, { useState } from "react";
-
-import {
-  SidebarProvider,
-  SidebarInset,
-} from "@/components/ui/sidebar";
-
+import * as React from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { NavMain } from "@/components/nav-main";
-import { NavUser } from "@/components/nav-user";
+import { ChartAreaInteractive } from "@/components/chart-area-interactive";
 import { DataTable } from "@/components/data-table";
-
-import { DashboardHeader } from "@/components/DashboardHeader";
-import { MetricChart } from "@/components/MetricChart";
-import { AlertsPanel } from "@/components/AlertsPanel";
+import { SectionCards } from "@/components/section-cards";
+import { SiteHeader } from "@/components/site-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 import { useMetrics } from "@/hooks/useMetrics";
 import { useAlerts } from "@/hooks/useAlerts";
-import type { Metric, Alert } from "@/types";
+import type { Metric } from "@/types";
+import type { Alert as AlertType } from "@/types";
 
-/**
- * DashboardPage
- *
- * - Usa el layout original de shadcn (sidebar + inset)
- * - Envuelve todo en SidebarProvider (necesario para AppSidebar)
- * - Integra nuestros componentes personalizados (KPI, métricas, alertas)
- */
-export default function DashboardPage(): React.JSX.Element {
-  const [host, setHost] = useState<string>("server01");
-
+export default function Page(): React.JSX.Element {
+  // global host; puedes hacerlo seleccionable en header si quieres
+  const host = ""; // empty => all hosts
   const { data: metrics = [], isLoading: metricsLoading } = useMetrics(host);
   const { data: alerts = [], isLoading: alertsLoading } = useAlerts();
 
+  const hosts = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const m of metrics) if (m.host) s.add(m.host);
+    return Array.from(s);
+  }, [metrics]);
+
   const loading = metricsLoading || alertsLoading;
-  const hasData = metrics.length > 0 || alerts.length > 0;
+
+  // Map alerts defensively to the DataTable schema expected
+  function mapAlertsToTableData(alertsArr: AlertType[] | undefined) {
+    if (!alertsArr || alertsArr.length === 0) return [];
+    return alertsArr.map((a, idx) => {
+      const id = (a as any).id ?? idx + 1;
+      const header = (a as any).title ?? (a as any).message ?? `Alert ${id}`;
+      const type = (a as any).type ?? (a as any).severity ?? "Alert";
+      const status = (a as any).status ?? ((a as any).resolved ? "Closed" : "Open");
+      const target = (a as any).host ?? "unknown";
+      const limit = (a as any).threshold ? String((a as any).threshold) : (a as any).limit ?? "—";
+      const reviewer = (a as any).owner ?? (a as any).reviewer ?? "system";
+      return { id, header, type, status, target, limit, reviewer };
+    });
+  }
+
+  const tableData = React.useMemo(() => mapAlertsToTableData(alerts), [alerts]);
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "calc(var(--spacing) * 72)",
+          "--header-height": "calc(var(--spacing) * 12)",
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar variant="inset" />
       <SidebarInset>
-            <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
-                <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-                    <NavMain
-                    items={[
-                        { title: "Dashboard", url: "/dashboard" },
-                        { title: "Metrics", url: "/metrics" },
-                        { title: "Alerts", url: "/alerts" },
-                        { title: "Settings", url: "/settings" },
-                    ]}
-                    />
-                    <NavUser
-                    user={{
-                        name: "Admin User",
-                        email: "admin@example.com",
-                        avatar: "https://avatars.githubusercontent.com/u/1?v=4",
-                    }}
-                    />
-                </div>
-            </header>
+        <SiteHeader />
 
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              {/* KPIs */}
+              <SectionCards metrics={metrics as Metric[]} alerts={alerts as AlertType[]} />
 
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto w-full max-w-7xl">
-            <DashboardHeader
-              metrics={metrics as Metric[]}
-              alerts={alerts as Alert[]}
-              onHostChange={(h: string) => setHost(h)}
-            />
-
-            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-              <div className="md:col-span-2">
-                {metricsLoading ? (
-                  <div className="rounded-lg border bg-card p-6">
-                    <p className="text-sm text-muted-foreground">
-                      Loading metrics...
-                    </p>
-                  </div>
-                ) : metrics.length === 0 ? (
-                  <div className="rounded-lg border bg-card p-6">
-                    <p className="text-sm text-muted-foreground">
-                      No metrics available for this host.
-                    </p>
-                  </div>
-                ) : (
-                  <MetricChart data={metrics as Metric[]} />
-                )}
+              {/* Chart: le pasamos metrics y hosts para selector */}
+              <div className="px-4 lg:px-6">
+                <ChartAreaInteractive metrics={metrics as Metric[]} hosts={hosts} host={host} />
               </div>
 
-              <div>
-                {alertsLoading ? (
+              {/* Data table: ahora se actualiza cuando tableData cambia */}
+              <div className="px-4 lg:px-6">
+                {loading ? (
                   <div className="rounded-lg border bg-card p-6">
-                    <p className="text-sm text-muted-foreground">
-                      Loading alerts...
-                    </p>
+                    <p className="text-sm text-muted-foreground">Loading data...</p>
+                  </div>
+                ) : tableData.length === 0 ? (
+                  <div className="rounded-lg border bg-card p-6">
+                    <p className="text-sm text-muted-foreground">No events to display.</p>
                   </div>
                 ) : (
-                  <AlertsPanel alerts={alerts as Alert[]} />
+                  <DataTable data={tableData} />
                 )}
               </div>
             </div>
-
-            <section className="mt-8">
-              <div className="grid gap-6">
-                <div className="rounded-lg border bg-card p-4">
-                  <h3 className="mb-4 text-lg font-semibold">
-                    Recent Events & Hosts
-                  </h3>
-                  {DataTable ? (
-                    <DataTable
-                      data={[
-                        {
-                          id: 1,
-                          header: "CPU Usage Alert",
-                          type: "Performance",
-                          status: "Open",
-                          target: "server01",
-                          limit: "85%",
-                          reviewer: "system",
-                        },
-                        {
-                          id: 2,
-                          header: "Memory Threshold",
-                          type: "System",
-                          status: "Closed",
-                          target: "server02",
-                          limit: "90%",
-                          reviewer: "system",
-                        },
-                      ]}
-                    />
-                  ) : !hasData ? (
-                    <p className="text-sm text-muted-foreground">
-                      No events or hosts to display.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-left text-sm text-muted-foreground">
-                            <th className="py-2">Host</th>
-                            <th className="py-2">CPU %</th>
-                            <th className="py-2">Memory %</th>
-                            <th className="py-2">Latency (ms)</th>
-                            <th className="py-2">Last seen</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {groupLatestByHost(metrics as Metric[]).map((row) => (
-                            <tr key={row.host} className="border-t">
-                              <td className="py-3">{row.host}</td>
-                              <td className="py-3">
-                                {row.cpu_usage?.toFixed(1)}
-                              </td>
-                              <td className="py-3">
-                                {row.memory_usage?.toFixed(1)}
-                              </td>
-                              <td className="py-3">
-                                {row.latency?.toFixed(1)}
-                              </td>
-                              <td className="py-3">
-                                {new Date(row.timestamp).toLocaleString()}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
           </div>
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );
-}
-
-/**
- * Helper: groupLatestByHost
- */
-function groupLatestByHost(
-  metrics: Metric[]
-): Array<Metric & { host: string }> {
-  if (!metrics || metrics.length === 0) return [];
-  const sorted = [...metrics].sort(
-    (a, b) => +new Date(b.timestamp) - +new Date(a.timestamp)
-  );
-  const seen = new Set<string>();
-  const result: Metric[] = [];
-  for (const m of sorted) {
-    if (!seen.has(m.host)) {
-      seen.add(m.host);
-      result.push(m);
-    }
-  }
-  return result;
 }
