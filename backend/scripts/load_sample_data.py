@@ -1,12 +1,4 @@
-import os
-import sys
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../backend/scripts
-BACKEND_DIR = os.path.dirname(SCRIPT_DIR)                 # .../backend
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
-
-
+import os, sys
 import pandas as pd
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
@@ -50,18 +42,20 @@ def load_alerts(csv_path: str, db: Session):
     print(f"Loaded {len(alerts)} alerts")
 
 def main():
-    if len(sys.argv) >= 3:
-        metrics_csv, alerts_csv = sys.argv[1], sys.argv[2]
-    else:
-        metrics_csv = get_sample_path("hydra_metrics_sample.csv")
-        alerts_csv = get_sample_path("hydra_alerts_sample.csv")
-
-    print(f"Using sample data:\n  - Metrics: {metrics_csv}\n  - Alerts: {alerts_csv}")
+    csv_metrics = get_sample_path("hydra_metrics_sample.csv")
+    csv_alerts = get_sample_path("hydra_alerts_sample.csv")
+    reset = "--reset" in sys.argv
 
     db = SessionLocal()
     try:
-        load_metrics(metrics_csv, db)
-        load_alerts(alerts_csv, db)
+        if reset:
+            print("Resetting tables: truncating alerts and metrics")
+            db.execute("TRUNCATE TABLE alerts RESTART IDENTITY CASCADE;")
+            db.execute("TRUNCATE TABLE metrics RESTART IDENTITY CASCADE;")
+            db.commit()
+
+        load_metrics(csv_metrics, db)
+        load_alerts(csv_alerts, db)
     finally:
         db.close()
 

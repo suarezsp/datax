@@ -1,12 +1,16 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# system deps needed for psycopg2 if using psycopg2 (if you use psycopg2-binary you can skip libpq-dev)
+RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
-COPY backend/ /app/
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+COPY . /app
+
+RUN chmod +x /app/entrypoint.sh /app/wait_for_db.py
+
+EXPOSE 8000
+CMD ["/app/entrypoint.sh"]

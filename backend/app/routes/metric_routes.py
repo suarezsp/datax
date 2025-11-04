@@ -16,7 +16,6 @@ def get_db():
 
 @router.get("/", response_model=list[MetricResponse])
 def get_metrics(limit: int = 100, db: Session = Depends(get_db)):
-    """Devuelve las métricas más recientes"""
     metrics = db.query(Metric).order_by(Metric.timestamp.desc()).limit(limit).all()
     return metrics
 

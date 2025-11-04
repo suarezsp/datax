@@ -24,3 +24,10 @@ def health():
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+    
+#prometheus
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator().instrument(app).expose(app)
+except Exception:
+    pass
