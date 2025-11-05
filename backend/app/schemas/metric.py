@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 class MetricCreate(BaseModel): # Define the base schema for metrics
@@ -11,5 +11,4 @@ class MetricCreate(BaseModel): # Define the base schema for metrics
 class MetricResponse(MetricCreate): # Schema for creating a new metric
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

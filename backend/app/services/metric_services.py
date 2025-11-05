@@ -7,7 +7,7 @@ from app.services.alert_service import check_for_alerts
 # create a new metric and check for alerts
 def create_metric(db: Session, metric_data: MetricCreate):
     # save metric 
-    metric = Metric(**metric_data.dict())
+    metric = Metric(**metric_data.model_dump())
     db.add(metric)
     db.commit()
     db.refresh(metric)

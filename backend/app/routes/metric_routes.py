@@ -21,7 +21,7 @@ def get_metrics(limit: int = 100, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=MetricResponse)
 def add_metric(metric: MetricCreate, db: Session = Depends(get_db)):
-    new_metric = Metric(**metric.dict())
+    new_metric = Metric(**metric.model_dump())
     db.add(new_metric)
     db.commit()
     db.refresh(new_metric)
