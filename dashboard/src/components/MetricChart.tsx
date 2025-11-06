@@ -1,13 +1,21 @@
+"use client";
+
 import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  LineChart,
-  Line,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   CartesianGrid,
   Legend,
 } from "recharts";
@@ -19,10 +27,16 @@ interface MetricChartProps {
   onHostChange?: (host: string) => void; // emits "all" for all
 }
 
-export function MetricChart({ data = [], host = "all", onHostChange }: MetricChartProps) {
-  const [metricType, setMetricType] = React.useState<"cpu_usage" | "memory_usage" | "latency">("cpu_usage");
+type MetricType = "both" | "cpu_usage" | "memory_usage" | "latency";
 
-  // Obtener los hosts únicos (limpio)
+export function MetricChart({
+  data = [],
+  host = "all",
+  onHostChange,
+}: MetricChartProps) {
+  const [metricType, setMetricType] = React.useState<MetricType>("both");
+
+  // Unique hosts (clean)
   const hosts = React.useMemo(() => {
     const set = new Set<string>();
     for (const m of data) {
@@ -31,16 +45,31 @@ export function MetricChart({ data = [], host = "all", onHostChange }: MetricCha
     return Array.from(set);
   }, [data]);
 
-  // Filtramos defensivamente
+  // Defensive data shaping
   const safeData = Array.isArray(data) ? data : [];
+
+  // Filter by host (host === "all" => all hosts)
   const filteredData = React.useMemo(() => {
     return host && host !== "all" ? safeData.filter((d) => d.host === host) : safeData;
   }, [safeData, host]);
 
-  const metricLabels: Record<typeof metricType, string> = {
-    cpu_usage: "CPU Usage (%)",
-    memory_usage: "Memory Usage (%)",
-    latency: "Latency (ms)",
+  // Ensure timestamps are ISO strings and sorted ascending
+  const chartData = React.useMemo(() => {
+    return filteredData
+      .slice()
+      .map((d) => ({
+        ...d,
+        timestamp:
+          typeof d.timestamp === "string" ? d.timestamp : new Date(d.timestamp).toISOString(),
+      }))
+      .sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp));
+  }, [filteredData]);
+
+  // Colors / gradients
+  const colors = {
+    cpu: "#8884d8", // purple-ish
+    mem: "#82ca9d", // green-ish
+    lat: "#ff7300", // orange
   };
 
   return (
@@ -49,7 +78,6 @@ export function MetricChart({ data = [], host = "all", onHostChange }: MetricCha
         <CardTitle className="text-lg font-semibold">Performance Trends</CardTitle>
 
         <div className="flex flex-wrap gap-2">
-          {/* Selector de host: usa "all" sentinel */}
           <Select value={host || "all"} onValueChange={(v) => onHostChange?.(v === "all" ? "all" : v)}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="All hosts" />
@@ -64,12 +92,12 @@ export function MetricChart({ data = [], host = "all", onHostChange }: MetricCha
             </SelectContent>
           </Select>
 
-          {/* Selector de métrica */}
-          <Select value={metricType} onValueChange={(v) => setMetricType(v as any)}>
-            <SelectTrigger className="w-[160px]">
+          <Select value={metricType} onValueChange={(v) => setMetricType(v as MetricType)}>
+            <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select metric" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="both">CPU & Memory</SelectItem>
               <SelectItem value="cpu_usage">CPU Usage</SelectItem>
               <SelectItem value="memory_usage">Memory Usage</SelectItem>
               <SelectItem value="latency">Latency</SelectItem>
@@ -78,30 +106,102 @@ export function MetricChart({ data = [], host = "all", onHostChange }: MetricCha
         </div>
       </CardHeader>
 
-      <CardContent className="h-80">
-        {filteredData.length === 0 ? (
+      <CardContent className="h-80 px-2 pt-4 sm:px-6 sm:pt-6">
+        {chartData.length === 0 ? (
           <div className="text-center text-sm text-muted-foreground mt-10">No data</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={filteredData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="timestamp" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey={metricType}
-                stroke={
-                  metricType === "cpu_usage"
-                    ? "#8884d8"
-                    : metricType === "memory_usage"
-                    ? "#82ca9d"
-                    : "#ff7300"
-                }
-                dot={false}
+            <ComposedChart data={chartData}>
+              {/* Gradients */}
+              <defs>
+                <linearGradient id="gradCpu" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={colors.cpu} stopOpacity={0.85} />
+                  <stop offset="95%" stopColor={colors.cpu} stopOpacity={0.08} />
+                </linearGradient>
+                <linearGradient id="gradMem" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={colors.mem} stopOpacity={0.85} />
+                  <stop offset="95%" stopColor={colors.mem} stopOpacity={0.08} />
+                </linearGradient>
+                <linearGradient id="gradLat" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={colors.lat} stopOpacity={0.85} />
+                  <stop offset="95%" stopColor={colors.lat} stopOpacity={0.08} />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="timestamp"
+                tick={{ fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={24}
+                tickFormatter={(value) => {
+                  // show time HH:MM
+                  const d = new Date(value);
+                  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+                }}
               />
-            </LineChart>
+              <YAxis tick={{ fontSize: 12 }} width={56} />
+              <Tooltip
+                labelFormatter={(value) =>
+                  new Date(value).toLocaleString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                }
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                }}
+              />
+              <Legend />
+
+              {/* Render según selección */}
+              {/* CPU & Memory (stacked for visual comparison) */}
+              {(metricType === "both" || metricType === "memory_usage") && (
+                <Area
+                  type="natural"
+                  dataKey="memory_usage"
+                  name="Memory (%)"
+                  fill="url(#gradMem)"
+                  stroke={colors.mem}
+                  fillOpacity={1}
+                  stackId={metricType === "both" ? "a" : undefined}
+                  isAnimationActive={false}
+                  dot={false}
+                />
+              )}
+
+              {(metricType === "both" || metricType === "cpu_usage") && (
+                <Area
+                  type="natural"
+                  dataKey="cpu_usage"
+                  name="CPU (%)"
+                  fill="url(#gradCpu)"
+                  stroke={colors.cpu}
+                  fillOpacity={1}
+                  stackId={metricType === "both" ? "a" : undefined}
+                  isAnimationActive={false}
+                  dot={false}
+                />
+              )}
+
+              {/* Latency (drawn separately so scale/visual don't confuse CPU/Mem) */}
+              {metricType === "latency" && (
+                <Area
+                  type="monotone"
+                  dataKey="latency"
+                  name="Latency (ms)"
+                  fill="url(#gradLat)"
+                  stroke={colors.lat}
+                  fillOpacity={1}
+                  isAnimationActive={false}
+                  dot={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </CardContent>

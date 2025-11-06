@@ -5,7 +5,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from dotenv import load_dotenv
 
-# === Define project base path ===
+# Define project base path
 BASE_DIR = Path(__file__).resolve().parents[1]  # points to backend/
 ROOT_DIR = BASE_DIR.parent  # points to project root (hydra/)
 load_dotenv(ROOT_DIR / ".env")
@@ -13,22 +13,21 @@ load_dotenv(ROOT_DIR / ".env")
 # Ensure backend folder in sys.path (so 'app' can be imported)
 sys.path.insert(0, str(BASE_DIR))
 
-# === Alembic Config ===
+#  Alembic Config 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# === Import DB base and models ===
+#  Import DB base and models 
 from app.core.database import Base, DATABASE_URL  # noqa: E402
 from app.models.metric import Metric  # noqa: E402
 from app.models.alert import Alert  # noqa: E402
 
-# === Target metadata ===
+#  Target metadata 
 target_metadata = Base.metadata
 
-# === Run Migrations (Offline/Online) ===
+#  Run Migrations (Offline/Online) 
 def run_migrations_offline():
-    """Run migrations in 'offline' mode."""
     url = DATABASE_URL
     context.configure(
         url=url,
@@ -41,7 +40,6 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
-    """Run migrations in 'online' mode."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

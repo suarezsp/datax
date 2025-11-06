@@ -24,105 +24,129 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Metric } from "@/types";
 
 type Props = {
   metrics?: Metric[];
-  host?: string;
+  host?: string; // "all" means all hosts
   hosts?: string[]; // optional hosts list to populate selector
-  onHostChange?: (host: string) => void; // "all" means all hosts
+  onHostChange?: (host: string) => void;
 };
 
-const chartCfg: ChartConfig = {
+const chartConfig: ChartConfig = {
   cpu: { label: "CPU (%)", color: "var(--color-desktop)" },
   memory: { label: "Memory (%)", color: "var(--color-memory)" },
 };
 
-export function ChartAreaInteractive({
-  metrics = [],
-  host,
-  hosts = [],
-  onHostChange,
-}: Props) {
+function parseTimestamp(ts: any): number | null {
+  if (ts == null) return null;
+  if (typeof ts === "number" && Number.isFinite(ts)) return ts;
+  if (typeof ts === "string") {
+    const n = Date.parse(ts);
+    if (!isNaN(n)) return n;
+    const f = parseFloat(ts);
+    if (!isNaN(f)) return f;
+  }
+  if (ts instanceof Date && !isNaN(ts.getTime())) return ts.getTime();
+  return null;
+}
+
+export function ChartAreaInteractive({ metrics = [], host, hosts = [], onHostChange }: Props) {
   const isMobile = useIsMobile();
 
-  // mode state: union literal
+  // mode: live, 7d, 1m (1 month)
   const [mode, setMode] = React.useState<"live" | "7d" | "1m">("live");
 
-  // Build host list (unique) from provided `hosts` prop or from metrics
+  // build host list from props or metrics
   const hostList = React.useMemo(() => {
     const base = Array.isArray(hosts) && hosts.length ? hosts : (Array.isArray(metrics) ? metrics.map(m => m.host) : []);
     const s = new Set<string>();
     for (const h of base) {
-      if (h && typeof h === "string" && h.trim() !== "") {
-        s.add(h);
-      }
+      if (h && typeof h === "string" && h.trim() !== "") s.add(h);
     }
     return Array.from(s);
   }, [hosts, metrics]);
 
-  // internal selection uses the sentinel "all" (never empty string)
-  const initialHostInternal = host && host.trim() !== "" ? host : (hostList[0] ?? "all");
-  const [selectedHostInternal, setSelectedHostInternal] = React.useState<string>(initialHostInternal);
+  // internal host sentinel = "all"
+  const initialHost = host && host.trim() !== "" ? host : (hostList[0] ?? "all");
+  const [selectedHost, setSelectedHost] = React.useState<string>(initialHost);
 
   React.useEffect(() => {
-    // sync parent -> internal ("all" means all)
-    if (host && host.trim() !== "" && host !== selectedHostInternal) {
-      setSelectedHostInternal(host);
-    } else if ((!host || host === "") && selectedHostInternal !== "all") {
-      // parent cleared (''), make internal "all"
-      setSelectedHostInternal("all");
+    if (host && host.trim() !== "" && host !== selectedHost) setSelectedHost(host);
+    else if ((!host || host === "") && selectedHost !== "all") setSelectedHost("all");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host]);
+
+  // effective host filter string for backend logic: '' means all
+  const effectiveHostFilter = selectedHost === "all" ? "" : selectedHost;
+
+  // normalize metrics defensively
+  const normalized = React.useMemo(() => {
+    if (!Array.isArray(metrics)) return [];
+    const out: Array<{ ts: number; cpu: number; memory: number; host?: string }> = [];
+    for (const m of metrics) {
+      const ts = parseTimestamp((m as any).timestamp ?? (m as any).time ?? (m as any).created_at);
+      if (ts === null) continue;
+      const cpu = Number((m as any).cpu_usage ?? (m as any).cpu ?? NaN);
+      const memory = Number((m as any).memory_usage ?? (m as any).memory ?? NaN);
+      if (!Number.isFinite(cpu) || !Number.isFinite(memory)) continue;
+      out.push({ ts, cpu, memory, host: (m as any).host });
     }
-  }, [host, selectedHostInternal]);
+    return out;
+  }, [metrics]);
 
-  // Convert internal selection into a filter string for metrics ('all' -> include all)
-  const effectiveSelectedHost = selectedHostInternal === "all" ? "" : selectedHostInternal;
-
-  // Safe metrics array
-  const safeMetrics = Array.isArray(metrics) ? metrics : [];
-
-  // Build chart data
+  // Build chart data depending on mode
   const chartData = React.useMemo(() => {
-    // apply host filter
-    const filtered = effectiveSelectedHost ? safeMetrics.filter((m) => m.host === effectiveSelectedHost) : safeMetrics.slice();
+    // filter by host
+    const filtered = effectiveHostFilter ? normalized.filter(n => n.host === effectiveHostFilter) : normalized.slice();
 
     if (mode === "live") {
-      // last 5 minutes window, keep up to 60 points
+      // last 5 minutes window, aggregate per second to avoid duplicate timestamps
       const now = Date.now();
-      const fiveMin = 1000 * 60 * 5;
-      const recent = filtered.filter((m) => +new Date(m.timestamp) >= now - fiveMin);
-      const points = recent
-        .slice()
-        .sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp))
-        .slice(-60)
-        .map((m) => ({
-          date: m.timestamp,
-          cpu: m.cpu_usage ?? 0,
-          memory: m.memory_usage ?? 0,
-        }));
-      return points.length ? points : [{ date: new Date().toISOString(), cpu: 0, memory: 0 }];
+      const windowMs = 1000 * 60 * 5;
+      const start = now - windowMs;
+      const recent = filtered.filter(p => p.ts >= start);
+      if (!recent.length) return [];
+
+      const buckets = new Map<number, { cpuSum: number; memSum: number; count: number }>();
+      for (const p of recent) {
+        const key = Math.floor(p.ts / 1000) * 1000; // second granularity
+        const v = buckets.get(key) ?? { cpuSum: 0, memSum: 0, count: 0 };
+        v.cpuSum += p.cpu;
+        v.memSum += p.memory;
+        v.count += 1;
+        buckets.set(key, v);
+      }
+
+      const arr = Array.from(buckets.entries())
+        .map(([ts, { cpuSum, memSum, count }]) => ({
+          date: new Date(ts).toISOString(),
+          cpu: +(cpuSum / count).toFixed(2),
+          memory: +(memSum / count).toFixed(2),
+        }))
+        .sort((a, b) => +new Date(a.date) - +new Date(b.date))
+        .slice(-60);
+
+      return arr;
     }
 
     // 7d or 1m: aggregate by day
-    const windowDays = mode === "7d" ? 7 : 30;
+    const days = mode === "7d" ? 7 : 30;
     const end = new Date();
     const start = new Date(end);
-    start.setDate(end.getDate() - windowDays);
+    start.setDate(end.getDate() - days);
 
     const map = new Map<string, { cpuSum: number; memSum: number; count: number }>();
-    for (const m of filtered) {
-      const ts = new Date(m.timestamp);
-      if (ts < start) continue;
-      const dateKey = ts.toISOString().slice(0, 10);
-      const e = map.get(dateKey) ?? { cpuSum: 0, memSum: 0, count: 0 };
-      e.cpuSum += m.cpu_usage ?? 0;
-      e.memSum += m.memory_usage ?? 0;
-      e.count += 1;
-      map.set(dateKey, e);
+    for (const p of filtered) {
+      const d = new Date(p.ts);
+      if (d < start) continue;
+      const key = d.toISOString().slice(0, 10);
+      const val = map.get(key) ?? { cpuSum: 0, memSum: 0, count: 0 };
+      val.cpuSum += p.cpu;
+      val.memSum += p.memory;
+      val.count += 1;
+      map.set(key, val);
     }
 
     const arr = Array.from(map.entries())
@@ -133,8 +157,10 @@ export function ChartAreaInteractive({
       }))
       .sort((a, b) => +new Date(a.date) - +new Date(b.date));
 
-    return arr.length ? arr : [{ date: new Date().toISOString().slice(0, 10), cpu: 0, memory: 0 }];
-  }, [safeMetrics, mode, effectiveSelectedHost]);
+    return arr.length ? arr : [];
+  }, [normalized, mode, effectiveHostFilter]);
+
+  const hasData = chartData.length > 0;
 
   return (
     <Card className="@container/card">
@@ -146,7 +172,6 @@ export function ChartAreaInteractive({
         </CardDescription>
 
         <CardAction>
-          {/* Desktop toggle */}
           <ToggleGroup
             type="single"
             value={mode}
@@ -159,7 +184,7 @@ export function ChartAreaInteractive({
             <ToggleGroupItem value="1m">1 month</ToggleGroupItem>
           </ToggleGroup>
 
-          {/* Mobile select for mode */}
+          {/* mobile select */}
           <Select value={mode} onValueChange={(v) => setMode(v as "live" | "7d" | "1m")}>
             <SelectTrigger className="flex w-40 md:hidden" size="sm">
               <SelectValue placeholder="Live" />
@@ -171,12 +196,12 @@ export function ChartAreaInteractive({
             </SelectContent>
           </Select>
 
-          {/* Host selector: uses sentinel "all" (never empty string) */}
+          {/* host selector */}
           {hostList && hostList.length > 0 ? (
             <Select
-              value={selectedHostInternal}
+              value={selectedHost}
               onValueChange={(v) => {
-                setSelectedHostInternal(v);
+                setSelectedHost(v);
                 onHostChange?.(v === "all" ? "" : v);
               }}
             >
@@ -185,53 +210,57 @@ export function ChartAreaInteractive({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All hosts</SelectItem>
-                {hostList.map((h) => (
-                  <SelectItem key={h} value={h}>
-                    {h}
-                  </SelectItem>
+                {hostList.map(h => (
+                  <SelectItem key={h} value={h}>{h}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           ) : (
-            <div className="ml-2 hidden md:flex items-center text-muted-foreground text-sm">
-              No hosts
-            </div>
+            <div className="ml-2 hidden md:flex items-center text-muted-foreground text-sm">No hosts</div>
           )}
         </CardAction>
       </CardHeader>
 
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <ChartContainer config={chartCfg} className="aspect-auto h-[250px] w-full">
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="fillCpu" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-desktop)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="var(--color-desktop)" stopOpacity={0.1} />
-              </linearGradient>
-              <linearGradient id="fillMem" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-memory)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="var(--color-memory)" stopOpacity={0.1} />
-              </linearGradient>
-            </defs>
+        <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
+          {!hasData ? (
+            <div className="text-center text-sm text-muted-foreground mt-8">
+              {mode === "live"
+                ? "No recent metrics in the last 5 minutes. Ensure the generator is running and the backend route returns data."
+                : "No data for the selected range."}
+            </div>
+          ) : (
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="fillCpu" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--color-desktop)" stopOpacity={0.9} />
+                  <stop offset="95%" stopColor="var(--color-desktop)" stopOpacity={0.08} />
+                </linearGradient>
+                <linearGradient id="fillMem" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--color-memory)" stopOpacity={0.9} />
+                  <stop offset="95%" stopColor="var(--color-memory)" stopOpacity={0.08} />
+                </linearGradient>
+              </defs>
 
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={32}
-              tickFormatter={(value) => {
-                const d = new Date(value);
-                return mode === "live"
-                  ? d.toLocaleTimeString()
-                  : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-              }}
-            />
-            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-            <Area dataKey="memory" type="natural" fill="url(#fillMem)" stroke="var(--color-memory)" stackId="a" />
-            <Area dataKey="cpu" type="natural" fill="url(#fillCpu)" stroke="var(--color-desktop)" stackId="a" />
-          </AreaChart>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={24}
+                tickFormatter={(value) => {
+                  const d = new Date(value);
+                  return mode === "live"
+                    ? d.toLocaleTimeString()
+                    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                }}
+              />
+              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+              <Area dataKey="memory" type="natural" fill="url(#fillMem)" stroke="var(--color-memory)" stackId="a" />
+              <Area dataKey="cpu" type="natural" fill="url(#fillCpu)" stroke="var(--color-desktop)" stackId="a" />
+            </AreaChart>
+          )}
         </ChartContainer>
       </CardContent>
     </Card>

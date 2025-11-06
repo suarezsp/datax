@@ -21,7 +21,7 @@ for host in hosts:
         if lat > 250:
             rows_alerts.append([len(rows_alerts)+1, host, "latency_high", lat, ts, random.choice(["active","resolved"])])
 
-# Guardar CSVs
+# save cvs
 with open("hydra_metrics_sample.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["host","cpu_usage","memory_usage","latency","timestamp"])

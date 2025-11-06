@@ -1,4 +1,3 @@
-// src/components/section-cards.tsx
 "use client";
 
 import * as React from "react";
@@ -13,31 +12,28 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 
-import type { Metric } from "@/types";
-import type { Alert as AlertType } from "@/types";
+import type { Metric, Alert as AlertType } from "@/types";
+
+// Utilidad para calcular variación porcentual
+function percentChange(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
 
 type Props = {
   metrics?: Metric[];
   alerts?: AlertType[];
 };
 
-function percentChange(current: number, previous: number) {
-  if (previous === 0) return current === 0 ? 0 : 100;
-  return ((current - previous) / Math.abs(previous)) * 100;
-}
-
-
 export function SectionCards({ metrics = [], alerts = [] }: Props) {
-  // derive hosts and counts
+  // Hosts únicos
   const hosts = React.useMemo(() => {
     const set = new Set<string>();
-    for (const m of metrics) {
-      if (m.host) set.add(m.host);
-    }
+    for (const m of metrics) if (m.host) set.add(m.host);
     return Array.from(set);
   }, [metrics]);
 
-  // Average latest CPU per host (take latest metric for each host then avg)
+  // Promedio de CPU más reciente por host
   const avgCpu = React.useMemo(() => {
     if (!metrics.length) return 0;
     const byHost = new Map<string, Metric[]>();
@@ -46,28 +42,34 @@ export function SectionCards({ metrics = [], alerts = [] }: Props) {
       arr.push(m);
       byHost.set(m.host, arr);
     }
+
     const latestVals: number[] = [];
-    for (const [host, arr] of byHost) {
+    for (const [, arr] of byHost) {
       const sorted = arr.slice().sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
       const latest = sorted[0];
       if (typeof latest.cpu_usage === "number") latestVals.push(latest.cpu_usage);
     }
-    if (!latestVals.length) return 0;
-    return latestVals.reduce((s, v) => s + v, 0) / latestVals.length;
+
+    return latestVals.length
+      ? latestVals.reduce((s, v) => s + v, 0) / latestVals.length
+      : 0;
   }, [metrics]);
 
-  // Alerts counts
-  const openAlerts = React.useMemo(() => alerts.filter((a: any) => !(a.resolved || a.status === "Closed")).length, [alerts]);
+  // Alertas abiertas / totales
+  const openAlerts = React.useMemo(
+    () => alerts.filter((a: any) => !(a.resolved || a.status === "Closed")).length,
+    [alerts]
+  );
   const totalAlerts = alerts.length;
 
-  // Trend calculation: compare last 7 days with previous 7-day window
+  // Tendencia en alertas (últimos 7 días vs previos 7)
   const trend = React.useMemo(() => {
-    // helper to sum by window
     const now = Date.now();
     const day = 1000 * 60 * 60 * 24;
     const curStart = now - 7 * day;
     const prevStart = now - 14 * day;
-    let curCount = 0, prevCount = 0;
+    let curCount = 0,
+      prevCount = 0;
 
     for (const a of alerts) {
       const ts = a.timestamp ? +new Date(a.timestamp) : NaN;
@@ -80,7 +82,7 @@ export function SectionCards({ metrics = [], alerts = [] }: Props) {
     return { cur: curCount, prev: prevCount, pct };
   }, [alerts]);
 
-  // Prepare display values
+  // KPI Cards
   const kpiItems = [
     {
       title: "Active Hosts",
@@ -88,13 +90,15 @@ export function SectionCards({ metrics = [], alerts = [] }: Props) {
       desc: `${hosts.length} host(s) connected.`,
       trendPct: 0,
       up: true,
+      detail: "Connected systems monitored in real time",
     },
     {
       title: "Avg CPU (%)",
       value: Number(avgCpu.toFixed(1)),
-      desc: `Average CPU (last per host)`,
+      desc: "Average CPU (latest per host)",
       trendPct: 0,
       up: avgCpu >= 0,
+      detail: "Average processing usage across hosts",
     },
     {
       title: "Alerts (open)",
@@ -102,18 +106,35 @@ export function SectionCards({ metrics = [], alerts = [] }: Props) {
       desc: `${openAlerts} open of ${totalAlerts}`,
       trendPct: Math.round(trend.pct),
       up: trend.pct >= 0,
+      detail: "System alerts currently unresolved",
     },
     {
-      title: "Mean of incidents",
+      title: "Mean of Incidents (%)",
       value: totalAlerts ? Math.round((openAlerts / totalAlerts) * 100) : 0,
-      desc: `Open / total (%)`,
+      desc: "Open / total incidents ratio",
       trendPct: Math.round(trend.pct),
-      up: trend.pct <= 0 ? false : true,
+      up: trend.pct >= 0,
+      detail: "Percentage of incidents still open",
     },
   ];
 
   return (
-    <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+    <div
+      className="
+        grid 
+        grid-cols-1 
+        gap-4 
+        px-4 
+        sm:grid-cols-2 
+        lg:grid-cols-4 
+        *:data-[slot=card]:bg-gradient-to-t 
+        *:data-[slot=card]:from-primary/5 
+        *:data-[slot=card]:to-card 
+        *:data-[slot=card]:shadow-xs 
+        dark:*:data-[slot=card]:bg-card
+        lg:px-6
+      "
+    >
       {kpiItems.map((k) => (
         <Card key={k.title} className="@container/card">
           <CardHeader>
@@ -122,15 +143,22 @@ export function SectionCards({ metrics = [], alerts = [] }: Props) {
               {k.value}
             </CardTitle>
             <CardAction>
-              <Badge variant="outline" className="flex items-center gap-2">
+              <Badge variant="outline">
                 {k.up ? <IconTrendingUp /> : <IconTrendingDown />}
                 {k.trendPct >= 0 ? `+${k.trendPct}%` : `${k.trendPct}%`}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="flex-col items-start gap-1.5 text-sm">
-            <div className="line-clamp-1 flex gap-2 font-medium">{k.desc}</div>
-            <div className="text-muted-foreground">Last update: now</div>
+            <div className="line-clamp-1 flex gap-2 font-medium">
+              {k.desc}{" "}
+              {k.up ? (
+                <IconTrendingUp className="size-4" />
+              ) : (
+                <IconTrendingDown className="size-4" />
+              )}
+            </div>
+            <div className="text-muted-foreground">{k.detail}</div>
           </CardFooter>
         </Card>
       ))}

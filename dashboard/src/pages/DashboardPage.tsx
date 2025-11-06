@@ -14,15 +14,13 @@ import { useAlerts } from "@/hooks/useAlerts";
 import type { Metric, Alert as AlertType } from "@/types";
 
 export default function Page(): React.JSX.Element {
-  // Usamos "all" como valor sentinel en UI; el hook useMetrics recibe '' para backend
   const [selectedHost, setSelectedHost] = React.useState<string>("all");
 
-  // Pasamos al hook '' cuando el selectedHost === 'all'
   const hostForBackend = selectedHost === "all" ? "" : selectedHost;
   const { data: metrics = [], isLoading: metricsLoading } = useMetrics(hostForBackend);
   const { data: alerts = [], isLoading: alertsLoading } = useAlerts();
 
-  // lista de hosts para pasar a ChartAreaInteractive (opcional)
+  // list of host to send to Chart
   const hosts = React.useMemo(() => {
     const s = new Set<string>();
     for (const m of metrics) if (m.host) s.add(m.host);
@@ -60,22 +58,15 @@ export default function Page(): React.JSX.Element {
               {/* KPIs */}
               <SectionCards metrics={metrics} alerts={alerts} />
 
-              {/* Gráfico interactivo principal */}
-              <ChartAreaInteractive
-                metrics={metrics}
-                hosts={hosts}
-                host={selectedHost}
-                onHostChange={(h) => setSelectedHost(h ?? "all")}
-              />
 
-              {/* Gráfico adicional con selector de tipo de métrica */}
+              {/* to select type of metric */}
               <MetricChart
                 data={metrics}
                 host={selectedHost}
                 onHostChange={(h) => setSelectedHost(h ?? "all")}
               />
 
-              {/* Tabla de alertas */}
+              {/* alerts table */}
               <DataTable data={tableData} />
             </>
           )}

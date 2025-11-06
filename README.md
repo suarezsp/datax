@@ -29,6 +29,8 @@ python3 -m venv venv
 source venv/bin/activate  # (Windows: venv\Scripts\activate)
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+# or with generator
+HYDRA_GENERATE_METRICS=true HYDRA_GEN_HOSTS="dev1,dev2" HYDRA_GEN_INTERVAL=3 uvicorn app.main:app --reload --port 8000
 ```
 
 3. Frontend (localhost:5173)

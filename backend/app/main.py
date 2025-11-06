@@ -97,7 +97,6 @@ def _maybe_start_metric_generator():
 
 
 # prometheus metrics
-# prometheus metrics (robusta: instrumenta y monta ASGI app de prometheus en /prometheus)
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
     from prometheus_client import make_asgi_app
@@ -105,7 +104,7 @@ try:
     # instrument the FastAPI app (collectors, middleware, etc.)
     Instrumentator().instrument(app)
 
-    # mount Prometheus exposition at /prometheus (texto que viste)
+    # mount Prometheus exposition at /prometheus
     app.mount("/prometheus", make_asgi_app())
 
     logger.info("Prometheus instrumentation enabled and mounted at /prometheus")
