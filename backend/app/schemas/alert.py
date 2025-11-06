@@ -9,5 +9,5 @@ class Alert(BaseModel):  # Define the base schema for alerts
     timestamp : datetime
     status: str
 
-    model_config = ConfigDict(from_attributes=True)  # Reemplaza Config + orm_mode
+    model_config = ConfigDict(from_attributes=True)
     

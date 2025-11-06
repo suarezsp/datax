@@ -5,9 +5,12 @@ import type { Metric } from "@/types";
 export const useMetrics = (host?: string) => {
   return useQuery<Metric[], Error>({
     queryKey: ["metrics", host],
-    queryFn: () => getMetrics(host),
+    queryFn: async () => {
+      const data = await getMetrics(host);
+      return Array.isArray(data) ? data : [];
+    },
     refetchInterval: 5000,
     staleTime: 2000,
-    placeholderData: (previousData) => previousData, 
+    placeholderData: (prev) => prev,
   });
 };

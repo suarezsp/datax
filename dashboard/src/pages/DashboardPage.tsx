@@ -1,4 +1,3 @@
-// src/pages/dashboard/Page.tsx
 "use client";
 
 import * as React from "react";
@@ -8,18 +7,22 @@ import { DataTable } from "@/components/data-table";
 import { SectionCards } from "@/components/section-cards";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { MetricChart } from "@/components/MetricChart";
 
 import { useMetrics } from "@/hooks/useMetrics";
 import { useAlerts } from "@/hooks/useAlerts";
-import type { Metric } from "@/types";
-import type { Alert as AlertType } from "@/types";
+import type { Metric, Alert as AlertType } from "@/types";
 
 export default function Page(): React.JSX.Element {
-  // global host; puedes hacerlo seleccionable en header si quieres
-  const host = ""; // empty => all hosts
-  const { data: metrics = [], isLoading: metricsLoading } = useMetrics(host);
+  // Usamos "all" como valor sentinel en UI; el hook useMetrics recibe '' para backend
+  const [selectedHost, setSelectedHost] = React.useState<string>("all");
+
+  // Pasamos al hook '' cuando el selectedHost === 'all'
+  const hostForBackend = selectedHost === "all" ? "" : selectedHost;
+  const { data: metrics = [], isLoading: metricsLoading } = useMetrics(hostForBackend);
   const { data: alerts = [], isLoading: alertsLoading } = useAlerts();
 
+  // lista de hosts para pasar a ChartAreaInteractive (opcional)
   const hosts = React.useMemo(() => {
     const s = new Set<string>();
     for (const m of metrics) if (m.host) s.add(m.host);
@@ -28,7 +31,6 @@ export default function Page(): React.JSX.Element {
 
   const loading = metricsLoading || alertsLoading;
 
-  // Map alerts defensively to the DataTable schema expected
   function mapAlertsToTableData(alertsArr: AlertType[] | undefined) {
     if (!alertsArr || alertsArr.length === 0) return [];
     return alertsArr.map((a, idx) => {
@@ -46,46 +48,38 @@ export default function Page(): React.JSX.Element {
   const tableData = React.useMemo(() => mapAlertsToTableData(alerts), [alerts]);
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
+    <SidebarProvider>
+      <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <main className="flex flex-col gap-6 p-4 lg:p-8">
+          {loading ? (
+            <div className="text-muted-foreground text-center py-20">Loading metrics and alerts...</div>
+          ) : (
+            <>
               {/* KPIs */}
-              <SectionCards metrics={metrics as Metric[]} alerts={alerts as AlertType[]} />
+              <SectionCards metrics={metrics} alerts={alerts} />
 
-              {/* Chart: le pasamos metrics y hosts para selector */}
-              <div className="px-4 lg:px-6">
-                <ChartAreaInteractive metrics={metrics as Metric[]} hosts={hosts} host={host} />
-              </div>
+              {/* Gráfico interactivo principal */}
+              <ChartAreaInteractive
+                metrics={metrics}
+                hosts={hosts}
+                host={selectedHost}
+                onHostChange={(h) => setSelectedHost(h ?? "all")}
+              />
 
-              {/* Data table: ahora se actualiza cuando tableData cambia */}
-              <div className="px-4 lg:px-6">
-                {loading ? (
-                  <div className="rounded-lg border bg-card p-6">
-                    <p className="text-sm text-muted-foreground">Loading data...</p>
-                  </div>
-                ) : tableData.length === 0 ? (
-                  <div className="rounded-lg border bg-card p-6">
-                    <p className="text-sm text-muted-foreground">No events to display.</p>
-                  </div>
-                ) : (
-                  <DataTable data={tableData} />
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+              {/* Gráfico adicional con selector de tipo de métrica */}
+              <MetricChart
+                data={metrics}
+                host={selectedHost}
+                onHostChange={(h) => setSelectedHost(h ?? "all")}
+              />
+
+              {/* Tabla de alertas */}
+              <DataTable data={tableData} />
+            </>
+          )}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

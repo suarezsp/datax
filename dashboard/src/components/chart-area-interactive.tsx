@@ -1,4 +1,3 @@
-// src/components/chart-area-interactive.tsx
 "use client";
 
 import * as React from "react";
@@ -35,7 +34,7 @@ type Props = {
   metrics?: Metric[];
   host?: string;
   hosts?: string[]; // optional hosts list to populate selector
-  onHostChange?: (host: string) => void; // returns empty string for "all"
+  onHostChange?: (host: string) => void; // "all" means all hosts
 };
 
 const chartCfg: ChartConfig = {
@@ -54,34 +53,42 @@ export function ChartAreaInteractive({
   // mode state: union literal
   const [mode, setMode] = React.useState<"live" | "7d" | "1m">("live");
 
-
-  const initialHostInternal = host && host !== "" ? host : hosts[0] ?? "all";
-  const [selectedHostInternal, setSelectedHostInternal] = React.useState<string>(
-    initialHostInternal || "all"
-  );
-
-  React.useEffect(() => {
-    // if parent passes a host prop, reflect it (convert empty -> "all")
-    setSelectedHostInternal(host && host !== "" ? host : hosts[0] ?? "all");
-  }, [host, hosts]);
-
   // Build host list (unique) from provided `hosts` prop or from metrics
   const hostList = React.useMemo(() => {
-    if (hosts && hosts.length) return hosts;
+    const base = Array.isArray(hosts) && hosts.length ? hosts : (Array.isArray(metrics) ? metrics.map(m => m.host) : []);
     const s = new Set<string>();
-    for (const m of metrics) if (m.host) s.add(m.host);
+    for (const h of base) {
+      if (h && typeof h === "string" && h.trim() !== "") {
+        s.add(h);
+      }
+    }
     return Array.from(s);
   }, [hosts, metrics]);
 
-  // Convert internal selection into a filter string ('' means all)
-  const effectiveSelectedHost = React.useMemo(() => {
-    return selectedHostInternal === "all" ? "" : selectedHostInternal;
-  }, [selectedHostInternal]);
+  // internal selection uses the sentinel "all" (never empty string)
+  const initialHostInternal = host && host.trim() !== "" ? host : (hostList[0] ?? "all");
+  const [selectedHostInternal, setSelectedHostInternal] = React.useState<string>(initialHostInternal);
+
+  React.useEffect(() => {
+    // sync parent -> internal ("all" means all)
+    if (host && host.trim() !== "" && host !== selectedHostInternal) {
+      setSelectedHostInternal(host);
+    } else if ((!host || host === "") && selectedHostInternal !== "all") {
+      // parent cleared (''), make internal "all"
+      setSelectedHostInternal("all");
+    }
+  }, [host, selectedHostInternal]);
+
+  // Convert internal selection into a filter string for metrics ('all' -> include all)
+  const effectiveSelectedHost = selectedHostInternal === "all" ? "" : selectedHostInternal;
+
+  // Safe metrics array
+  const safeMetrics = Array.isArray(metrics) ? metrics : [];
 
   // Build chart data
   const chartData = React.useMemo(() => {
     // apply host filter
-    const filtered = effectiveSelectedHost ? metrics.filter((m) => m.host === effectiveSelectedHost) : metrics.slice();
+    const filtered = effectiveSelectedHost ? safeMetrics.filter((m) => m.host === effectiveSelectedHost) : safeMetrics.slice();
 
     if (mode === "live") {
       // last 5 minutes window, keep up to 60 points
@@ -127,7 +134,7 @@ export function ChartAreaInteractive({
       .sort((a, b) => +new Date(a.date) - +new Date(b.date));
 
     return arr.length ? arr : [{ date: new Date().toISOString().slice(0, 10), cpu: 0, memory: 0 }];
-  }, [metrics, mode, effectiveSelectedHost]);
+  }, [safeMetrics, mode, effectiveSelectedHost]);
 
   return (
     <Card className="@container/card">
@@ -152,7 +159,7 @@ export function ChartAreaInteractive({
             <ToggleGroupItem value="1m">1 month</ToggleGroupItem>
           </ToggleGroup>
 
-          {/* Mobile select for mode (visible on small screens) */}
+          {/* Mobile select for mode */}
           <Select value={mode} onValueChange={(v) => setMode(v as "live" | "7d" | "1m")}>
             <SelectTrigger className="flex w-40 md:hidden" size="sm">
               <SelectValue placeholder="Live" />
@@ -164,13 +171,12 @@ export function ChartAreaInteractive({
             </SelectContent>
           </Select>
 
-          {/* Host selector: show only if we have hosts; 'all' sentinel avoids empty-string SelectItem */}
+          {/* Host selector: uses sentinel "all" (never empty string) */}
           {hostList && hostList.length > 0 ? (
             <Select
               value={selectedHostInternal}
               onValueChange={(v) => {
                 setSelectedHostInternal(v);
-                // notify parent with empty string for "all"
                 onHostChange?.(v === "all" ? "" : v);
               }}
             >

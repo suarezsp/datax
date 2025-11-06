@@ -1,25 +1,23 @@
-export interface Metric {
-    id: number;
-    host: string;
-    cpu_usage: number;
-    memory_usage: number;
-    latency: number;
-    timestamp: string;
-}
+// src/types/index.ts
+export type Metric = {
+  id?: number;           // id solo para responses
+  host: string;
+  cpu_usage: number;
+  memory_usage: number;
+  latency: number;
+  timestamp: string;     // backend devuelve datetime ISO -> string en frontend
+};
 
-export interface Alert {
-    id: number;
-    host: string;
-    type: string;
-    value: number;
-    timestamp: string;
-    status: 'active' | 'resolved';
-}
+export type Alert = {
+  id: number;
+  host: string;
+  type: string;
+  value: number;
+  timestamp: string;
+  status: string;
+};
 
-export interface Trends {
-    hosts_count: number;
-    cpu_avg: number;
-    memory_avg: number;
-    latency_avg: number;
-    cpu_peak?: number;
-}
+// opcional:
+export type Trends = {
+  // define según lo que el backend devuelva
+};

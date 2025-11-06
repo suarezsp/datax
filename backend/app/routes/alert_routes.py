@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.alert import Alert as AlertModel
@@ -6,7 +6,6 @@ from app.schemas.alert import Alert
 from app.services.alert_service import get_active_alerts
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
-
 
 def get_db():
     db = SessionLocal()
@@ -33,3 +32,8 @@ def add_alert(alert: Alert, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_alert)
     return new_alert
+
+@router.post("/{id}/resolve")
+async def resolve_alert(id: int = Path(...)):
+    # TODO: later
+    return {"status": "resolved", "id": id}
