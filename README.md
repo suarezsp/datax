@@ -1,6 +1,9 @@
 # hydra
 Full-stack platform for monitoring the performance of systems and services in real time, automatically detecting anomalies, and predicting failures through time series analytics and machine learning.
 
+![Screenshot](docs/sc1.png)
+![Screenshot2](docs/sc2.png)
+
 ## Main resources
 
 - **FastAPI backend**, with optimized databases for temporal series.
